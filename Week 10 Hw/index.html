@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Stacked Bar Chart</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+        .bar rect {
+            stroke-width: 2;
+            stroke: white;
+        }
+        .tooltip {
+            position: absolute;
+            text-align: center;
+            padding: 8px;
+            background: lightsteelblue;
+            border: 0px;
+            border-radius: 4px;
+            pointer-events: none;
+            font-size: 12px;
+        }
+        .axis text {
+            font-size: 12px;
+        }
+        .highlight {
+            stroke: black;
+            stroke-width: 2px;
+        }
+    </style>
+</head>
+<body>
+
+<h1>Interactive Meat Production Stacked Bar Chart (2018-2022)</h1>
+<!-- Dropdown for filtering -->
+<label for="filter">Filter by Meat Type:</label>
+<select id="filter">
+  <option value="all">All</option>
+  <option value="Bovine Meat">Bovine Meat</option>
+  <option value="Pigmeat">Pigmeat</option>
+  <option value="Poultry Meat">Poultry Meat</option>
+  <option value="Mutton & Goat Meat">Mutton & Goat Meat</option>
+  <option value="Meat, Other">Meat, Other</option>
+</select>
+
+<!-- Container for the chart -->
+<div id="chart"></div>
+
+<script>
+    const data = [
+        { year: 2018, "Bovine Meat": 69449, "Pigmeat": 116982, "Poultry Meat": 121206, "Mutton & Goat Meat": 15167, "Meat, Other": 6547 },
+        { year: 2019, "Bovine Meat": 70656, "Pigmeat": 115271, "Poultry Meat": 127513, "Mutton & Goat Meat": 15099, "Meat, Other": 6270 },
+        { year: 2020, "Bovine Meat": 72959, "Pigmeat": 104102, "Poultry Meat": 132237, "Mutton & Goat Meat": 15410, "Meat, Other": 6304 },
+        { year: 2021, "Bovine Meat": 73877, "Pigmeat": 114745, "Poultry Meat": 132330, "Mutton & Goat Meat": 15854, "Meat, Other": 6323 },
+        { year: 2022, "Bovine Meat": 74831, "Pigmeat": 121352, "Poultry Meat": 135380, "Mutton & Goat Meat": 16108, "Meat, Other": 6258 }
+    ];
+
+    const margin = { top: 20, right: 30, bottom: 30, left: 60 };
+    const width = 800 - margin.left - margin.right;
+    const height = 500 - margin.top - margin.bottom;
+
+    const svg = d3.select("#chart")
+        .append("svg")
+        .attr("width", width + margin.left + margin.right)
+        .attr("height", height + margin.top + margin.bottom)
+        .append("g")
+        .attr("transform", `translate(${margin.left},${margin.top})`);
+
+    // Set the scales
+    const x = d3.scaleBand()
+        .domain(data.map(d => d.year))
+        .range([0, width])
+        .padding(0.2);
+
+    let y = d3.scaleLinear()
+        .domain([0, d3.max(data, d => d["Bovine Meat"] + d["Pigmeat"] + d["Poultry Meat"] + d["Mutton & Goat Meat"] + d["Meat, Other"])])
+        .nice()
+        .range([height, 0]);
+
+    const color = d3.scaleOrdinal()
+        .domain(["Bovine Meat", "Pigmeat", "Poultry Meat", "Mutton & Goat Meat", "Meat, Other"])
+        .range(["#e74c3c", "#f39c12", "#2ecc71", "#3498db", "#9b59b6"]);
+
+    const stack = d3.stack()
+        .keys(["Bovine Meat", "Pigmeat", "Poultry Meat", "Mutton & Goat Meat", "Meat, Other"]);
+
+    let stackedData = stack(data);
+
+    // Create the bars
+    let layers = svg.selectAll("g.layer")
+        .data(stackedData)
+        .enter().append("g")
+        .attr("class", "layer")
+        .attr("fill", d => color(d.key));
+
+    let bars = layers.selectAll("rect")
+        .data(d => d)
+        .enter().append("rect")
+        .attr("x", d => x(d.data.year))
+        .attr("y", d => y(d[1]))
+        .attr("height", d => y(d[0]) - y(d[1]))
+        .attr("width", x.bandwidth())
+        .on("mouseover", function(event, d) {
+            const meatType = this.parentNode.__data__.key;
+            const year = d.data.year;
+            const production = d3.format(",")(d[1] - d[0]);
+
+            tooltip.transition().duration(200).style("opacity", 1);
+            tooltip.html(`Year: ${year}<br>Type: ${meatType}<br>Production: ${production} tonnes`)
+                .style("left", (event.pageX + 10) + "px")
+                .style("top", (event.pageY - 28) + "px");
+            
+            d3.select(this).classed("highlight", true);  // Highlight effect
+        })
+        .on("mouseout", function() {
+            tooltip.transition().duration(500).style("opacity", 0);
+            d3.select(this).classed("highlight", false);  // Remove highlight effect
+        });
+
+    // Add X Axis
+    svg.append("g")
+        .attr("transform", `translate(0,${height})`)
+        .call(d3.axisBottom(x).tickSize(0).tickPadding(10));
+
+    // Add Y Axis
+    let yAxis = svg.append("g")
+        .attr("class", "y-axis")
+        .call(d3.axisLeft(y));
+
+    // Tooltip
+    const tooltip = d3.select("body").append("div")
+        .attr("class", "tooltip")
+        .style("opacity", 0);
+
+    // Filtering based on the dropdown selection
+    d3.select("#filter").on("change", function() {
+        const selected = this.value;
+
+        // Resetting the stacked data if "All" is selected
+        let filteredData = selected === "all"
+            ? stack.keys(["Bovine Meat", "Pigmeat", "Poultry Meat", "Mutton & Goat Meat", "Meat, Other"])(data)
+            : stack.keys([selected])(data);
+
+        // Update Y domain based on the selection
+        const maxY = d3.max(filteredData, layer => d3.max(layer, d => d[1]));
+        y.domain([0, maxY]).nice();
+        yAxis.transition().duration(500).call(d3.axisLeft(y));
+
+        // Clear old bars before re-rendering
+        layers.selectAll("rect").remove();
+
+        // Re-render layers and bars
+        layers = svg.selectAll("g.layer").data(filteredData)
+            .attr("fill", d => color(d.key));
+
+        bars = layers.selectAll("rect").data(d => d)
+            .enter().append("rect")
+            .transition().duration(500)
+            .attr("x", d => x(d.data.year))
+            .attr("y", d => y(d[1]))
+            .attr("height", d => y(d[0]) - y(d[1]))
+            .attr("width", x.bandwidth())
+            .attr("fill", d => color(this.parentNode.__data__.key));
+    });
+</script>
+
+</body>
+</html>
